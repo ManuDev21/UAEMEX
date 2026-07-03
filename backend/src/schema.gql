@@ -1,0 +1,333 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Asset {
+  brand: String
+  category: Category
+  categoryId: ID
+  code: String!
+  createdAt: DateTime!
+  department: Department
+  departmentId: ID
+  description: String!
+  id: ID!
+  model: String
+  observations: String
+  purchaseDate: DateTime
+  responsable: Responsable
+  responsableId: ID
+  serialNumber: String
+  status: AssetStatus!
+  updatedAt: DateTime!
+  value: Float
+}
+
+type AssetMovement {
+  assetId: ID!
+  createdAt: DateTime!
+  field: String!
+  id: ID!
+  newValue: String
+  note: String
+  oldValue: String
+  user: User
+}
+
+type AssetPage {
+  items: [Asset!]!
+  limit: Int!
+  page: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+"""Estado actual del bien institucional"""
+enum AssetStatus {
+  ACTIVO
+  DADO_DE_BAJA
+  EN_MANTENIMIENTO
+  EN_REPARACION
+  EXTRAVIADO
+}
+
+input AssetsFilterInput {
+  categoryId: ID
+  departmentId: ID
+  limit: Int = 20
+  page: Int = 1
+  responsableId: ID
+  search: String
+  status: AssetStatus
+}
+
+"""Acciones registradas en la auditoria del sistema"""
+enum AuditAction {
+  CREATE
+  DELETE
+  EXPORT
+  IMPORT
+  LOGIN
+  LOGOUT
+  UPDATE
+}
+
+type AuditLog {
+  action: AuditAction!
+  createdAt: DateTime!
+  details: String
+  entity: String
+  entityId: String
+  id: ID!
+  ipAddress: String
+  user: User
+}
+
+type AuthResponse {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type Category {
+  createdAt: DateTime!
+  depreciationRate: Float!
+  description: String
+  id: ID!
+  name: String!
+  updatedAt: DateTime!
+}
+
+type CountByLabel {
+  count: Int!
+  label: String!
+  value: Float!
+}
+
+input CreateAssetInput {
+  brand: String
+  categoryId: Int
+  code: String!
+  departmentId: Int
+  description: String!
+  model: String
+  observations: String
+  purchaseDate: String
+  responsableId: Int
+  serialNumber: String
+  status: AssetStatus = ACTIVO
+  value: Float = 0
+}
+
+input CreateCategoryInput {
+  depreciationRate: Float = 0
+  description: String
+  name: String!
+}
+
+input CreateDepartmentInput {
+  code: String!
+  isActive: Boolean = true
+  location: String
+  name: String!
+}
+
+input CreateResponsableInput {
+  email: String
+  fullName: String!
+  isActive: Boolean = true
+  phone: String
+  position: String
+}
+
+input CreateUserInput {
+  email: String!
+  fullName: String!
+  isActive: Boolean = true
+  password: String!
+  roleId: Int!
+}
+
+type DashboardStats {
+  activeAssets: Int!
+  byCategory: [CountByLabel!]!
+  byDepartment: [CountByLabel!]!
+  byStatus: [CountByLabel!]!
+  maintenanceAssets: Int!
+  monthlyMovements: [MonthlyMovement!]!
+  retiredAssets: Int!
+  totalAssets: Int!
+  totalCategories: Int!
+  totalDepartments: Int!
+  totalValue: Float!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Department {
+  code: String!
+  createdAt: DateTime!
+  id: ID!
+  isActive: Boolean!
+  location: String
+  name: String!
+  updatedAt: DateTime!
+}
+
+type ExcelImport {
+  createdAt: DateTime!
+  errorCount: Int!
+  errors: String
+  filename: String!
+  id: ID!
+  inserted: Int!
+  skipped: Int!
+  totalRows: Int!
+  updated: Int!
+  user: User
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type MonthlyMovement {
+  count: Int!
+  month: String!
+}
+
+type Mutation {
+  createAsset(input: CreateAssetInput!): Asset!
+  createCategory(input: CreateCategoryInput!): Category!
+  createDepartment(input: CreateDepartmentInput!): Department!
+  createResponsable(input: CreateResponsableInput!): Responsable!
+  createUser(input: CreateUserInput!): User!
+  login(input: LoginInput!): AuthResponse!
+  logout: Boolean!
+  refreshToken(input: RefreshTokenInput!): AuthResponse!
+  removeAsset(id: ID!): Boolean!
+  removeCategory(id: ID!): Boolean!
+  removeDepartment(id: ID!): Boolean!
+  removeResponsable(id: ID!): Boolean!
+  removeUser(id: ID!): Boolean!
+  updateAsset(input: UpdateAssetInput!): Asset!
+  updateCategory(input: UpdateCategoryInput!): Category!
+  updateDepartment(input: UpdateDepartmentInput!): Department!
+  updateResponsable(input: UpdateResponsableInput!): Responsable!
+  updateUser(input: UpdateUserInput!): User!
+}
+
+type Query {
+  asset(id: ID!): Asset!
+  assetByCode(code: String!): Asset!
+  assetMovements(assetId: ID!): [AssetMovement!]!
+  assets(filter: AssetsFilterInput): AssetPage!
+  auditLogs(limit: Int = 200): [AuditLog!]!
+  categories: [Category!]!
+  category(id: ID!): Category!
+  dashboardStats: DashboardStats!
+  department(id: ID!): Department!
+  departments: [Department!]!
+  me: User!
+  recentImports(limit: Int = 10): [ExcelImport!]!
+  recentMovements(limit: Int = 10): [AssetMovement!]!
+  responsable(id: ID!): Responsable!
+  responsables: [Responsable!]!
+  roles: [Role!]!
+  user(id: ID!): User!
+  users: [User!]!
+}
+
+input RefreshTokenInput {
+  refreshToken: String!
+}
+
+type Responsable {
+  createdAt: DateTime!
+  email: String
+  fullName: String!
+  id: ID!
+  isActive: Boolean!
+  phone: String
+  position: String
+  updatedAt: DateTime!
+}
+
+type Role {
+  createdAt: DateTime!
+  description: String
+  id: ID!
+  name: RoleName!
+  updatedAt: DateTime!
+}
+
+"""Roles del sistema: ADMIN, SUPERVISOR, CONSULTA"""
+enum RoleName {
+  ADMIN
+  CONSULTA
+  SUPERVISOR
+}
+
+input UpdateAssetInput {
+  brand: String
+  categoryId: Int
+  departmentId: Int
+  description: String
+  id: Int!
+  model: String
+  observations: String
+  purchaseDate: String
+  responsableId: Int
+  serialNumber: String
+  status: AssetStatus = ACTIVO
+  value: Float = 0
+}
+
+input UpdateCategoryInput {
+  depreciationRate: Float = 0
+  description: String
+  id: Int!
+  name: String
+}
+
+input UpdateDepartmentInput {
+  code: String
+  id: Int!
+  isActive: Boolean = true
+  location: String
+  name: String
+}
+
+input UpdateResponsableInput {
+  email: String
+  fullName: String
+  id: Int!
+  isActive: Boolean = true
+  phone: String
+  position: String
+}
+
+input UpdateUserInput {
+  email: String
+  fullName: String
+  id: Int!
+  isActive: Boolean = true
+  password: String
+  roleId: Int
+}
+
+type User {
+  createdAt: DateTime!
+  email: String!
+  fullName: String!
+  id: ID!
+  isActive: Boolean!
+  lastLoginAt: DateTime
+  role: Role!
+  roleId: ID!
+  updatedAt: DateTime!
+}

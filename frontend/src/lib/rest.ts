@@ -39,6 +39,7 @@ export async function uploadPdfExtract(file: File) {
   formData.append('file', file);
   const response = await rest.post('/pdf/extract', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000,
   });
   return response.data as {
     rows: Record<string, string>[];
@@ -54,6 +55,7 @@ export async function uploadPdfToExcel(file: File) {
   const response = await rest.post('/pdf/to-excel', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     responseType: 'blob',
+    timeout: 600000,
   });
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
@@ -70,6 +72,7 @@ export async function uploadPdfImport(file: File) {
   formData.append('file', file);
   const response = await rest.post('/pdf/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000,
   });
   return response.data as {
     filename: string;

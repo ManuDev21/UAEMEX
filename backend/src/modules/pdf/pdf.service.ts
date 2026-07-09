@@ -5,7 +5,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import * as ExcelJS from 'exceljs';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Asset } from '../assets/entities/asset.entity';
 import { Department } from '../departments/entities/department.entity';
 import { Category } from '../categories/entities/category.entity';
@@ -61,10 +63,11 @@ export class PdfService {
     @InjectRepository(Responsable)
     private readonly responsables: Repository<Responsable>,
     private readonly audit: AuditService,
+    private readonly configService: ConfigService,
   ) {}
 
   async extractFromPdf(buffer: Buffer): Promise<PdfExtractResult> {
-    // Try pdfjs-dist first (gives x,y positions for accurate table reconstruction)
+    // Step 1: Extract raw text with pdfjs-dist (always needed)
     let pdfjsResult: { rows: PdfExtractedRow[]; rawText: string } | null = null;
     try {
       pdfjsResult = await this.extractWithPdfJs(buffer);
@@ -72,7 +75,25 @@ export class PdfService {
       console.warn('pdfjs-dist extraction failed:', e?.message ?? e);
     }
 
-    // If pdfjs found structured rows, return them
+    // Step 2: If Gemini API key is configured, use AI to extract structured data
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (geminiKey && pdfjsResult && pdfjsResult.rawText.trim()) {
+      try {
+        const aiRows = await this.extractWithGemini(pdfjsResult.rawText, geminiKey);
+        if (aiRows.length > 0) {
+          return {
+            rows: aiRows,
+            rawText: pdfjsResult.rawText,
+            headers: this.collectAllHeaders(aiRows),
+            totalRows: aiRows.length,
+          };
+        }
+      } catch (e) {
+        console.warn('Gemini extraction failed, falling back:', e?.message ?? e);
+      }
+    }
+
+    // Step 3: If pdfjs found structured rows via position detection, return them
     if (pdfjsResult && pdfjsResult.rows.length > 0) {
       return {
         rows: pdfjsResult.rows,
@@ -82,7 +103,7 @@ export class PdfService {
       };
     }
 
-    // Fallback to pdf-parse for text extraction, then apply all parsing strategies
+    // Step 4: Fallback to pdf-parse for text extraction
     let rawText = pdfjsResult?.rawText ?? '';
     if (!rawText.trim()) {
       try {
@@ -119,6 +140,124 @@ export class PdfService {
       headers: rows.length > 0 ? this.collectAllHeaders(rows) : [],
       totalRows: rows.length,
     };
+  }
+
+  /**
+   * Use Google Gemini 1.5 Flash (free) to extract structured table data from PDF text.
+   * Splits text into chunks to stay within token limits.
+   */
+  private async extractWithGemini(
+    rawText: string,
+    apiKey: string,
+  ): Promise<PdfExtractedRow[]> {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    console.log(`[Gemini] Starting extraction: ${rawText.length} chars of text`);
+
+    const prompt = `Eres un asistente experto en extraer informacion estructurada de documentos PDF de inventario de activos institucionales.
+
+Analiza el siguiente texto extraido de un PDF y extrae TODOS los registros de bienes/activos que encuentres.
+
+Para cada registro, identifica y completa estos campos (deja vacio si no existe la informacion):
+- Etiqueta (numero de etiqueta/inventario)
+- Articulo (descripcion del bien)
+- Modelo
+- Serie (numero de serie)
+- Caracteristicas
+- Adquisicion (fecha de adquisicion)
+- $Unitario (precio/valor unitario)
+- Area (departamento/area)
+- Responsable
+- Fecha Alta
+- Comentarios
+- Factura
+- Proveedor
+- Fecha
+- Estado
+
+IMPORTANTE:
+- Extrae TODOS los registros que encuentres, no omitas ninguno.
+- Si un campo no esta presente, dejalo como string vacio "".
+- Responde SOLO con un array JSON valido, sin texto adicional ni explicaciones.
+- Cada elemento del array debe ser un objeto con las claves exactas listadas arriba.
+
+Texto del PDF:
+`;
+
+    // Split text into chunks of ~400,000 characters (~100K tokens) 
+    // gemini-2.5-flash supports 1M token context window
+    const CHUNK_SIZE = 400000;
+    const chunks: string[] = [];
+    for (let i = 0; i < rawText.length; i += CHUNK_SIZE) {
+      chunks.push(rawText.substring(i, i + CHUNK_SIZE));
+    }
+
+    console.log(`[Gemini] Split into ${chunks.length} chunks of ~${CHUNK_SIZE} chars`);
+
+    const allRows: PdfExtractedRow[] = [];
+
+    for (let c = 0; c < chunks.length; c++) {
+      const chunkText = chunks[c];
+      if (!chunkText.trim()) continue;
+
+      console.log(`[Gemini] Processing chunk ${c + 1}/${chunks.length} (${chunkText.length} chars)`);
+
+      try {
+        const result = await model.generateContent(prompt + chunkText);
+        const response = result.response;
+        const text = response.text();
+
+        console.log(`[Gemini] Chunk ${c + 1} response: ${text.length} chars`);
+
+        // Parse JSON from response (remove any markdown code fences)
+        let jsonStr = text
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
+
+        // Handle truncated JSON: if the array is not closed, try to close it
+        if (jsonStr.startsWith('[') && !jsonStr.endsWith(']')) {
+          // Find the last complete object (ends with })
+          const lastBrace = jsonStr.lastIndexOf('}');
+          if (lastBrace > 0) {
+            jsonStr = jsonStr.substring(0, lastBrace + 1) + ']';
+            console.log(`[Gemini] Chunk ${c + 1}: fixed truncated JSON`);
+          }
+        }
+
+        const parsed = JSON.parse(jsonStr);
+
+        if (Array.isArray(parsed)) {
+          console.log(`[Gemini] Chunk ${c + 1}: extracted ${parsed.length} rows`);
+          for (const item of parsed) {
+            if (typeof item === 'object' && item !== null) {
+              const row: PdfExtractedRow = {};
+              for (const [key, value] of Object.entries(item)) {
+                row[key] = String(value ?? '').trim();
+              }
+              // Only add if at least one field has content
+              if (Object.values(row).some((v) => v.trim())) {
+                allRows.push(row);
+              }
+            }
+          }
+        } else {
+          console.warn(`[Gemini] Chunk ${c + 1}: response is not an array`);
+        }
+      } catch (chunkErr) {
+        console.warn(`[Gemini] Chunk ${c + 1}/${chunks.length} failed:`, chunkErr?.message);
+      }
+
+      // Rate limit: free tier allows 15 RPM, wait between requests
+      if (c < chunks.length - 1) {
+        console.log(`[Gemini] Waiting 4s before next chunk...`);
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      }
+    }
+
+    console.log(`[Gemini] Total extracted rows: ${allRows.length}`);
+    return allRows;
   }
 
   /**
@@ -1034,6 +1173,8 @@ export class PdfService {
     let autoCounter = 1;
     for (const row of result.rows) {
       let code = this.getField(row, [
+        'Etiqueta', 'etiqueta', 'Label', 'label', 'Tag', 'tag',
+        'Inventario', 'inventario',
         'Codigo', 'code', 'Code', 'Clave', 'cve', 'CVE',
         'No', 'no', 'No.', 'Num', 'num', 'Numero', 'numero',
         'Item', 'item', 'Linea', 'linea',
@@ -1074,7 +1215,9 @@ export class PdfService {
           'departamento',
           'Department',
           'Area',
+          'area',
           'Ubicacion',
+          'ubicacion',
         ]);
         const responsableName = this.getField(row, [
           'Responsable',
@@ -1099,7 +1242,10 @@ export class PdfService {
           'fecha',
           'Date',
           'compra',
+          'Adquisicion',
           'adquisicion',
+          'Fecha Alta',
+          'fecha alta',
         ]);
         const valueRaw = this.getField(row, [
           'Valor',
@@ -1112,11 +1258,29 @@ export class PdfService {
           'importe',
           'Monto',
           'monto',
+          '$Unitario',
+          'Unitario',
+          'unitario',
         ]);
 
         const statusRaw =
           this.getField(row, ['Estado', 'estado', 'Status', 'status']) ||
           'ACTIVO';
+
+        // Combine Comentarios, Factura, Proveedor into observations
+        const comentarios = this.getField(row, [
+          'Comentarios',
+          'comentarios',
+          'Observaciones',
+          'observaciones',
+          'Notas',
+          'notas',
+        ]);
+        const factura = this.getField(row, ['Factura', 'factura']);
+        const proveedor = this.getField(row, ['Proveedor', 'proveedor']);
+        let observations = comentarios;
+        if (factura) observations = (observations ? observations + ' | ' : '') + `Factura: ${factura}`;
+        if (proveedor) observations = (observations ? observations + ' | ' : '') + `Proveedor: ${proveedor}`;
 
         const payload: Partial<Asset> = {
           code,
@@ -1138,13 +1302,7 @@ export class PdfService {
             ? Number(valueRaw.replace(/[^0-9.-]/g, ''))
             : 0,
           status: this.parseStatus(statusRaw),
-          observations:
-            this.getField(row, [
-              'Observaciones',
-              'observaciones',
-              'Notas',
-              'notas',
-            ]) || undefined,
+          observations: observations || undefined,
         };
 
         const existing = await this.assets.findOne({ where: { code } });

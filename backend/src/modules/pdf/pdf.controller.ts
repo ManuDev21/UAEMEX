@@ -26,7 +26,7 @@ export class PdfController {
 
   @Post('extract')
   @Roles(RoleName.ADMIN, RoleName.SUPERVISOR)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 500 * 1024 * 1024 } }))
   async extract(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No se recibio ningun archivo');
@@ -39,7 +39,7 @@ export class PdfController {
 
   @Post('to-excel')
   @Roles(RoleName.ADMIN, RoleName.SUPERVISOR)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 500 * 1024 * 1024 } }))
   async toExcel(
     @UploadedFile() file: Express.Multer.File,
     @Res() res: Response,
@@ -65,7 +65,7 @@ export class PdfController {
 
   @Post('import')
   @Roles(RoleName.ADMIN)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 500 * 1024 * 1024 } }))
   async import(
     @UploadedFile() file: Express.Multer.File,
     @Req() req: Request,

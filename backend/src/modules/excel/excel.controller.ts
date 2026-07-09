@@ -25,7 +25,7 @@ export class ExcelController {
 
   @Post('import')
   @Roles(RoleName.ADMIN)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
   async import(
     @UploadedFile() file: Express.Multer.File,
     @Req() req: Request,

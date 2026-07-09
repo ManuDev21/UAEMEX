@@ -1,12 +1,17 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+
+  // Increase body parser limits for large file uploads (PDFs up to 500MB)
+  app.useBodyParser('json', { limit: '500mb' });
+  app.useBodyParser('urlencoded', { limit: '500mb', extended: true });
 
   app.use(
     helmet({

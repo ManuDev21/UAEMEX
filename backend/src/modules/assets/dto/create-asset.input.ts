@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsString,
 } from 'class-validator';
 import { AssetStatus } from '../../../common/enums/asset-status.enum';
 
@@ -35,7 +36,7 @@ export class CreateAssetInput {
   @IsNumber()
   value?: number;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @IsOptional()
   purchaseDate?: string;
 

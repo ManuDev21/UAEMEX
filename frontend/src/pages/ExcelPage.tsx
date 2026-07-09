@@ -40,7 +40,7 @@ export default function ExcelPage() {
 
   const handleFile = async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      alerts.error('Formato invalido', 'Selecciona un archivo .xlsx');
+      alerts.error('Formato invalido', 'Selecciona un archivo .xlsx o .xls');
       return;
     }
     setUploading(true);
@@ -113,7 +113,7 @@ export default function ExcelPage() {
               <FileSpreadsheet size={40} className="text-brand-600" />
             )}
             <p className="mt-3 text-sm font-medium">
-              Arrastra un archivo .xlsx o haz clic para seleccionar
+              Arrastra un archivo .xlsx o .xls o haz clic para seleccionar
             </p>
             <p className="text-xs text-slate-400">
               El sistema actualiza los bienes existentes por codigo

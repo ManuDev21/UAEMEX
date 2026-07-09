@@ -92,9 +92,49 @@ export class AssetsService {
   }
 
   async findByCode(code: string): Promise<Asset> {
-    const asset = await this.repo.findOne({ where: { code } });
+    const trimmed = code.trim();
+    // 1. Exact match
+    let asset = await this.repo.findOne({
+      where: { code: trimmed },
+      relations: ['category', 'department', 'responsable'],
+    });
+    // 2. Try without leading zeros
     if (!asset) {
-      throw new NotFoundException(`No existe un bien con codigo ${code}`);
+      const noZeros = trimmed.replace(/^0+/, '');
+      if (noZeros && noZeros !== trimmed) {
+        asset = await this.repo.findOne({
+          where: { code: noZeros },
+          relations: ['category', 'department', 'responsable'],
+        });
+      }
+    }
+    // 3. Try with leading zeros (pad to 6, 8, 10 digits)
+    if (!asset) {
+      for (const pad of [6, 8, 10, 12]) {
+        const padded = trimmed.padStart(pad, '0');
+        if (padded !== trimmed) {
+          asset = await this.repo.findOne({
+            where: { code: padded },
+            relations: ['category', 'department', 'responsable'],
+          });
+          if (asset) break;
+        }
+      }
+    }
+    // 4. Try LIKE match (code contains the search term or vice versa)
+    if (!asset) {
+      asset = await this.repo
+        .createQueryBuilder('asset')
+        .leftJoinAndSelect('asset.category', 'category')
+        .leftJoinAndSelect('asset.department', 'department')
+        .leftJoinAndSelect('asset.responsable', 'responsable')
+        .where('asset.code = :c', { c: trimmed })
+        .orWhere('asset.code LIKE :c', { c: `%${trimmed}%` })
+        .orWhere(':c LIKE CONCAT("%", asset.code, "%")', { c: trimmed })
+        .getOne();
+    }
+    if (!asset) {
+      throw new NotFoundException(`No existe un bien con codigo ${trimmed}`);
     }
     return asset;
   }
@@ -104,11 +144,10 @@ export class AssetsService {
     if (exists) {
       throw new BadRequestException(`El codigo ${input.code} ya existe`);
     }
+    const { purchaseDate, ...rest } = input;
     const asset = this.repo.create({
-      ...input,
-      purchaseDate: input.purchaseDate
-        ? new Date(input.purchaseDate)
-        : undefined,
+      ...rest,
+      purchaseDate: this.parseDate(purchaseDate),
     });
     const saved = await this.repo.save(asset);
     await this.audit.log({
@@ -143,7 +182,7 @@ export class AssetsService {
 
     Object.assign(asset, rest);
     if (purchaseDate !== undefined) {
-      asset.purchaseDate = purchaseDate ? new Date(purchaseDate) : undefined;
+      asset.purchaseDate = this.parseDate(purchaseDate);
     }
     const saved = await this.repo.save(asset);
 
@@ -177,5 +216,17 @@ export class AssetsService {
       details: `Bien eliminado: ${asset.code}`,
     });
     return (result.affected ?? 0) > 0;
+  }
+
+  private parseDate(value?: any): Date | undefined {
+    if (!value || value === '' || value === null) return undefined;
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? undefined : value;
+    }
+    const str = String(value).trim();
+    if (!str) return undefined;
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return undefined;
+    return d;
   }
 }

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { Asset } from '../assets/entities/asset.entity';
 import { Department } from '../departments/entities/department.entity';
 import { Category } from '../categories/entities/category.entity';
@@ -101,13 +102,48 @@ export class ExcelService {
     return (AssetStatus as any)[normalized] ?? AssetStatus.ACTIVO;
   }
 
+  private isXlsFile(filename: string, buffer: Buffer): boolean {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.xls')) return true;
+    // Check MIME-type / magic bytes for OLE2 compound document (old .xls format)
+    // OLE2 files start with D0 CF 11 E0 A1 B1 1A E1
+    if (buffer.length >= 8 &&
+        buffer[0] === 0xD0 && buffer[1] === 0xCF &&
+        buffer[2] === 0x11 && buffer[3] === 0xE0 &&
+        buffer[4] === 0xA1 && buffer[5] === 0xB1 &&
+        buffer[6] === 0x1A && buffer[7] === 0xE1) {
+      return true;
+    }
+    return false;
+  }
+
+  private convertXlsToXlsxBuffer(buffer: Buffer): Buffer {
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    // Write as .xlsx format
+    const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    return Buffer.from(xlsxBuffer);
+  }
+
   async import(
     buffer: Buffer,
     filename: string,
     userId?: number,
   ): Promise<ExcelImport> {
+    let workBuffer = buffer;
+
+    // Convert old .xls (Excel.Sheet.8) to .xlsx if needed
+    if (this.isXlsFile(filename, buffer)) {
+      try {
+        workBuffer = this.convertXlsToXlsxBuffer(buffer);
+      } catch {
+        throw new BadRequestException(
+          'No se pudo leer el archivo .xls. Asegurate de que sea un Excel valido',
+        );
+      }
+    }
+
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
+    await workbook.xlsx.load(workBuffer as any);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
       throw new BadRequestException('El archivo no contiene hojas validas');

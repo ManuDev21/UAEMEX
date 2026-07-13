@@ -53,7 +53,7 @@ export class User {
   roleId: number;
 
   @Field({ nullable: true })
-  @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
+  @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
   lastLoginAt?: Date;
 
   @Field()

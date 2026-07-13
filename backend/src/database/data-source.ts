@@ -17,7 +17,7 @@ dotenv.config();
 const config = configuration();
 
 export const AppDataSource = new DataSource({
-  type: 'mysql',
+  type: 'postgres',
   host: config.database.host,
   port: config.database.port,
   username: config.database.username,

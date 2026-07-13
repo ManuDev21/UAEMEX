@@ -36,15 +36,18 @@ import { PdfModule } from './modules/pdf/pdf.module';
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      autoSchemaFile: process.env.NODE_ENV === 'production'
+        ? join(__dirname, 'schema.gql')
+        : join(process.cwd(), 'src/schema.gql'),
       sortSchema: true,
-      playground: true,
+      playground: process.env.NODE_ENV !== 'production',
+      introspection: true,
       context: ({ req, res }) => ({ req, res }),
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'mysql',
+        type: 'postgres',
         host: config.get<string>('database.host'),
         port: config.get<number>('database.port'),
         username: config.get<string>('database.username'),
@@ -53,6 +56,7 @@ import { PdfModule } from './modules/pdf/pdf.module';
         autoLoadEntities: true,
         synchronize: config.get<boolean>('database.synchronize'),
         logging: config.get<boolean>('database.logging'),
+        ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
       }),
     }),
     AuthModule,

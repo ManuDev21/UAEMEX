@@ -74,7 +74,7 @@ export class DashboardService {
 
     const monthlyRaw = await this.movements
       .createQueryBuilder('m')
-      .select("DATE_FORMAT(m.created_at, '%Y-%m')", 'month')
+      .select("TO_CHAR(m.created_at, 'YYYY-MM')", 'month')
       .addSelect('COUNT(m.id)', 'count')
       .groupBy('month')
       .orderBy('month', 'ASC')
